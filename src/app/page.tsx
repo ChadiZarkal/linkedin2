@@ -1,65 +1,106 @@
-import Image from "next/image";
+"use client";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
-export default function Home() {
+interface Post { status: string; publishedAt: string | null; }
+interface Agent { enabled: boolean; }
+interface Workflow { startedAt: string; status: string; }
+interface Settings { postsPerWeek: number; }
+
+export default function Dashboard() {
+  const [stats, setStats] = useState({ published: 0, pending: 0, total: 0, agents: 0, thisWeek: 0, maxWeek: 3, lastRun: "" });
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => { loadData(); }, []);
+
+  async function loadData() {
+    try {
+      const [posts, agents, workflows, settings] = await Promise.all([
+        fetch("/api/posts").then(r => r.json()).catch(() => []),
+        fetch("/api/agents").then(r => r.json()).catch(() => []),
+        fetch("/api/workflow").then(r => r.json()).catch(() => []),
+        fetch("/api/settings").then(r => r.json()).catch(() => ({})),
+      ]);
+      const p = Array.isArray(posts) ? posts : [];
+      const a = Array.isArray(agents) ? agents : [];
+      const w = Array.isArray(workflows) ? workflows : [];
+      const now = new Date();
+      const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); weekStart.setHours(0,0,0,0);
+      setStats({
+        published: p.filter((x: Post) => x.status === "published").length,
+        pending: p.filter((x: Post) => x.status === "pending_approval").length,
+        total: p.length,
+        agents: a.filter((x: Agent) => x.enabled).length,
+        thisWeek: p.filter((x: Post) => x.status === "published" && x.publishedAt && new Date(x.publishedAt) >= weekStart).length,
+        maxWeek: (settings as Settings).postsPerWeek || 3,
+        lastRun: w.length > 0 ? (w as Workflow[])[0].startedAt : "",
+      });
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }
+
+  async function triggerWorkflow() {
+    setGenerating(true); setMessage("");
+    try {
+      const res = await fetch("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const result = await res.json();
+      if (result.status === "completed") setMessage("✅ Post généré avec succès !");
+      else if (result.status === "failed") setMessage("❌ Erreur: " + result.error);
+      else setMessage("⏳ Workflow en cours...");
+      loadData();
+    } catch (e) { setMessage("❌ " + e); } finally { setGenerating(false); }
+  }
+
+  if (loading) return <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}><div className="loader" /></div>;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>📊 Dashboard</h1>
+          <p style={{ color: "var(--muted)", fontSize: "0.875rem", marginTop: 4 }}>Vue d&apos;ensemble LinkedIn AutoPilot</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <button className="btn btn-primary" onClick={triggerWorkflow} disabled={generating}>
+          {generating ? <><div className="loader" style={{ width: 16, height: 16, borderWidth: 2 }} /> Génération...</> : "⚡ Générer un post"}
+        </button>
+      </div>
+
+      {message && <div className="card" style={{ marginBottom: "1.5rem", borderColor: message.includes("✅") ? "var(--success)" : "var(--danger)" }}>{message}</div>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+        <StatCard label="Cette semaine" value={`${stats.thisWeek}/${stats.maxWeek}`} sub="posts publiés" />
+        <StatCard label="En attente" value={stats.pending} sub="à approuver" color="var(--warning)" />
+        <StatCard label="Total publié" value={stats.published} sub="publications" color="var(--success)" />
+        <StatCard label="Agents actifs" value={stats.agents} sub="agents IA" color="var(--primary)" />
+      </div>
+
+      <div className="card" style={{ marginBottom: "1.5rem" }}>
+        <h2 style={{ fontWeight: 600, marginBottom: "1rem" }}>Actions rapides</h2>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          <Link href="/posts" className="btn btn-outline">📝 Publications</Link>
+          <Link href="/agents" className="btn btn-outline">🤖 Agents</Link>
+          <Link href="/workflow" className="btn btn-outline">⚡ Workflows</Link>
+          <Link href="/settings" className="btn btn-outline">⚙️ Paramètres</Link>
         </div>
-      </main>
+      </div>
+
+      {stats.lastRun && (
+        <div className="card">
+          <h2 style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Dernier workflow</h2>
+          <p style={{ color: "var(--muted)", fontSize: "0.875rem" }}>Exécuté le {new Date(stats.lastRun).toLocaleString("fr-FR")}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub: string; color?: string }) {
+  return (
+    <div className="card">
+      <div style={{ color: "var(--muted)", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
+      <div style={{ fontSize: "2rem", fontWeight: 700, marginTop: 4, color: color || "var(--foreground)" }}>{value}</div>
+      <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{sub}</div>
     </div>
   );
 }
