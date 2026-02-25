@@ -4,7 +4,7 @@
     "postsPerWeek": 3,
     "autoPublish": false,
     "autoApproveTopics": true,
-    "defaultTone": "expert et inspirant",
+    "defaultTone": "professionnel mais accessible",
     "globalModel": "gemini-2.5-flash",
     "globalPrompt": "",
     "topicPreferences": {
