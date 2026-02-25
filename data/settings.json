@@ -5,7 +5,7 @@
     "autoPublish": false,
     "autoApproveTopics": true,
     "defaultTone": "professionnel mais accessible",
-    "globalModel": "gemini-2.5-flash",
+    "globalModel": "gemini-3.1-pro-preview",
     "globalPrompt": "",
     "topicPreferences": {
       "recency": "mixed",
