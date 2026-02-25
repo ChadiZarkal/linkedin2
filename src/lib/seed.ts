@@ -1,6 +1,6 @@
 // src/lib/seed.ts
 // Seed default agents (with prompt modes) and settings
-import { readCollection, writeCollection } from "./db";
+import { readCollection, writeCollection, readCollectionAsync, writeCollectionAsync } from "./db";
 import type { Agent, Settings } from "./types";
 
 const DEFAULT_AGENTS: Agent[] = [
@@ -359,5 +359,21 @@ export function seedDefaults() {
   const settings = readCollection<Settings>("settings");
   if (settings.length === 0) {
     writeCollection("settings", [DEFAULT_SETTINGS]);
+  }
+}
+
+export async function seedDefaultsAsync() {
+  const agents = await readCollectionAsync<Agent>("agents");
+  if (agents.length === 0) {
+    const seeded = DEFAULT_AGENTS.map((a) => {
+      const activeMode = a.promptModes.find((m) => m.id === a.activePromptModeId);
+      return { ...a, prompt: activeMode?.prompt || a.prompt };
+    });
+    await writeCollectionAsync("agents", seeded);
+  }
+
+  const settings = await readCollectionAsync<Settings>("settings");
+  if (settings.length === 0) {
+    await writeCollectionAsync("settings", [DEFAULT_SETTINGS]);
   }
 }

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "settings",
+    "postsPerWeek": 3,
+    "autoPublish": false,
+    "autoApproveTopics": true,
+    "defaultTone": "professionnel mais accessible",
+    "globalModel": "gemini-2.5-flash",
+    "globalPrompt": "",
+    "topicPreferences": {
+      "recency": "mixed",
+      "categories": [
+        "tech",
+        "ai",
+        "innovation",
+        "career"
+      ],
+      "customInstructions": "Privilégier les sujets liés à l'IA, la data, et l'innovation technologique."
+    },
+    "publishSchedule": {
+      "days": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "timeSlots": [
+        "09:00",
+        "12:30"
+      ],
+      "timezone": "Europe/Paris"
+    },
+    "linkedinProfile": {
+      "name": "Chadi Zarkal",
+      "urn": "urn:li:person:_knk8RXHBP",
+      "email": "chadizarkal25@gmail.com"
+    }
+  }
+]
