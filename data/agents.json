@@ -128,10 +128,10 @@
       }
     ],
     "activePromptModeId": "writer-pro",
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.1-pro-preview",
     "enabled": true,
     "order": 5,
     "createdAt": "2026-02-24T19:36:35.133Z",
-    "updatedAt": "2026-02-24T19:36:35.133Z"
+    "updatedAt": "2026-02-25T11:59:05.108Z"
   }
 ]
