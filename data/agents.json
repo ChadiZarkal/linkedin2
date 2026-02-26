@@ -4,7 +4,7 @@
     "name": "🔍 Chercheur d'Inspiration",
     "role": "researcher",
     "description": "Recherche sur internet les dernières tendances et sujets pertinents",
-    "prompt": "Tu es un agent de veille BREAKING NEWS pour LinkedIn.\n\nTon rôle est de trouver les 3-5 actualités LES PLUS RÉCENTES (dernières 24-48h) dans le domaine tech/IA.\n\nCritères :\n- UNIQUEMENT des actualités très récentes (pas plus de 48h)\n- Priorité aux annonces majeures, lancements, acquisitions, percées technologiques\n- Chercher les scoops et les infos que peu de gens ont encore partagées\n\nFormate ta réponse en JSON :\n[\n  {\n    \"title\": \"...\",\n    \"description\": \"...\",\n    \"angle\": \"...\",\n    \"category\": \"tech|ai|innovation|management|career|other\",\n    \"recency\": \"recent\"\n  }\n]",
+    "prompt": "Tu es un agent de veille spécialisé dans la recherche de sujets tendance pour LinkedIn.\n\nTon rôle est de trouver 3 à 5 idées de sujets intéressants et pertinents pour un post LinkedIn professionnel.\n\nCritères de recherche :\n- Sujets liés à la tech, l'IA, l'innovation, le management, ou le développement personnel\n- Privilégier les actualités récentes ou tendances émergentes\n- Éviter les sujets trop généraux ou déjà vus partout\n- Chercher des angles originaux et engageants\n\nPour chaque sujet, fournis :\n1. **Titre** : Un titre accrocheur\n2. **Description** : 2-3 phrases expliquant le sujet\n3. **Angle** : L'angle unique que l'on pourrait prendre\n4. **Sources** : Les sources si disponibles\n\nFormate ta réponse en JSON :\n[\n  {\n    \"title\": \"...\",\n    \"description\": \"...\",\n    \"angle\": \"...\",\n    \"category\": \"tech|ai|innovation|management|career|other\",\n    \"recency\": \"recent|trending|evergreen\"\n  }\n]",
     "promptModes": [
       {
         "id": "researcher-default",
@@ -17,12 +17,12 @@
         "prompt": "Tu es un agent de veille BREAKING NEWS pour LinkedIn.\n\nTon rôle est de trouver les 3-5 actualités LES PLUS RÉCENTES (dernières 24-48h) dans le domaine tech/IA.\n\nCritères :\n- UNIQUEMENT des actualités très récentes (pas plus de 48h)\n- Priorité aux annonces majeures, lancements, acquisitions, percées technologiques\n- Chercher les scoops et les infos que peu de gens ont encore partagées\n\nFormate ta réponse en JSON :\n[\n  {\n    \"title\": \"...\",\n    \"description\": \"...\",\n    \"angle\": \"...\",\n    \"category\": \"tech|ai|innovation|management|career|other\",\n    \"recency\": \"recent\"\n  }\n]"
       }
     ],
-    "activePromptModeId": "researcher-breaking",
+    "activePromptModeId": "researcher-default",
     "model": "gemini-2.5-flash",
     "enabled": true,
     "order": 1,
     "createdAt": "2026-02-24T19:36:35.133Z",
-    "updatedAt": "2026-02-26T09:40:17.719Z"
+    "updatedAt": "2026-02-26T09:40:38.825Z"
   },
   {
     "id": "agent-topic-selector",
