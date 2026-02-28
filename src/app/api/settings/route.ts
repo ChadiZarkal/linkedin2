@@ -12,6 +12,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
+  await seedDefaultsAsync();
   const settings = await readCollectionAsync<Settings>("settings");
   const current = settings[0] || { id: "settings" };
   const updated = { ...current, ...body, id: "settings" };

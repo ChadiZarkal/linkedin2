@@ -15,7 +15,7 @@ function getClient(): GoogleGenAI {
 
   const credentials = getCredentials();
   const project = process.env.GOOGLE_CLOUD_PROJECT || "ai-agent-cha-2y53";
-  const location = process.env.GOOGLE_CLOUD_LOCATION || "europe-west1";
+  const location = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
 
   clientInstance = new GoogleGenAI({
     vertexai: true,
@@ -36,7 +36,7 @@ export async function generateContent(
   systemInstruction?: string
 ): Promise<string> {
   const client = getClient();
-  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.5-pro";
+  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
   const config: Record<string, unknown> = {};
   if (systemInstruction) {
@@ -58,7 +58,7 @@ export async function generateWithSearch(
   systemInstruction?: string
 ): Promise<{ text: string; sources: string[] }> {
   const client = getClient();
-  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.5-pro";
+  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
   const config: Record<string, unknown> = {
     tools: [{ googleSearch: {} }],
@@ -90,30 +90,4 @@ export async function generateWithSearch(
     text: response.text || "",
     sources,
   };
-}
-
-// Search for image suggestions using Gemini
-export async function findImageSuggestions(
-  topic: string,
-  model?: string
-): Promise<string[]> {
-  const prompt = `Pour un post LinkedIn sur le sujet suivant : "${topic}"
-
-Propose 4 images pertinentes en donnant pour chacune des mots-clés en anglais.
-
-Formate en JSON (UNIQUEMENT le JSON, pas de texte autour) :
-[
-  { "description": "Description courte en français", "keywords": "mot clé 1, mot clé 2" }
-]`;
-
-  try {
-    const result = await generateContent(prompt, model);
-    const parsed = JSON.parse(result.replace(/```json\n?|\n?```/g, "").trim());
-    // Use Pexels search URLs (these actually render thumbnails)
-    return parsed.map((img: { keywords: string; description: string }) =>
-      `https://images.pexels.com/photos/${Math.floor(Math.random() * 9000000) + 1000000}/pexels-photo.jpeg?auto=compress&cs=tinysrgb&w=600&h=400&dpr=1`
-    );
-  } catch {
-    return [];
-  }
 }
