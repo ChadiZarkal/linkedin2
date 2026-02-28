@@ -36,7 +36,7 @@ export async function generateContent(
   systemInstruction?: string
 ): Promise<string> {
   const client = getClient();
-  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.5-pro";
 
   const config: Record<string, unknown> = {};
   if (systemInstruction) {
@@ -58,7 +58,7 @@ export async function generateWithSearch(
   systemInstruction?: string
 ): Promise<{ text: string; sources: string[] }> {
   const client = getClient();
-  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.5-pro";
 
   const config: Record<string, unknown> = {
     tools: [{ googleSearch: {} }],

@@ -164,7 +164,7 @@ export async function stepGenerate(options: {
   includeImages?: boolean;
 }): Promise<WorkflowRun> {
   const settings = getSettings();
-  const model = options.model || settings.globalModel || "gemini-2.0-flash";
+  const model = options.model || settings.globalModel || "gemini-2.5-pro";
   const runs = readCollection<WorkflowRun>("workflow_runs");
   const workflowRun = runs.find((r) => r.id === options.workflowId);
   if (!workflowRun) throw new Error("Workflow non trouvé");
@@ -311,7 +311,7 @@ export async function stepOrchestrate(options: {
   includeImages?: boolean;
 }): Promise<WorkflowRun> {
   const settings = getSettings();
-  const model = options.model || settings.globalModel || "gemini-2.0-flash";
+  const model = options.model || settings.globalModel || "gemini-2.5-pro";
 
   // ─── Step 1: Orchestrator decides pipeline AND tweaks prompts ───
   const orchestratorPrompt = `Tu es un orchestrateur de workflow LinkedIn intelligent.
@@ -547,7 +547,7 @@ export async function revisePost(options: {
   promptModeId?: string;
 }): Promise<{ postId: string; content: string }> {
   const settings = getSettings();
-  const model = options.model || settings.globalModel || "gemini-2.0-flash";
+  const model = options.model || settings.globalModel || "gemini-2.5-pro";
 
   const posts = readCollection<Post>("posts");
   const originalPost = posts.find((p) => p.id === options.postId);
@@ -600,7 +600,7 @@ export async function runFullWorkflow(options?: {
   model?: string;
 }): Promise<WorkflowRun> {
   const settings = getSettings();
-  const model = options?.model || settings.globalModel || "gemini-2.0-flash";
+  const model = options?.model || settings.globalModel || "gemini-2.5-pro";
 
   if (options?.customTopic) {
     return stepOrchestrate({ instruction: options.customTopic, model });
@@ -792,7 +792,7 @@ export async function runTechWowWorkflow(options?: {
   model?: string;
 }): Promise<WorkflowRun> {
   const settings = getSettings();
-  const model = options?.model || settings.globalModel || "gemini-2.0-flash";
+  const model = options?.model || settings.globalModel || "gemini-2.5-pro";
 
   const workflowRun = makeEmptyRun("tech_wow");
   workflowRun.currentStep = "researcher";
@@ -963,7 +963,7 @@ export async function ensurePostBuffer(minBuffer?: number): Promise<{ generated:
   }
 
   let generated = 0;
-  const model = settings.globalModel || "gemini-2.0-flash";
+  const model = settings.globalModel || "gemini-2.5-pro";
   const workflowMode = settings.cronWorkflowMode || "tech_wow";
 
   // Generate posts one at a time to avoid rate limiting
