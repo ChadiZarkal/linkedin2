@@ -25,6 +25,8 @@ export default function PostsPage() {
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
   const [scheduleTimes, setScheduleTimes] = useState<Record<string, string>>({});
+  const [filter, setFilter] = useState<"all" | "pending" | "published" | "rejected">("all");
+  const [bufferLoading, setBufferLoading] = useState(false);
 
   const loadPosts = useCallback(async () => {
     const data = await fetch("/api/posts").then(r => r.json()).catch(() => []);
@@ -119,21 +121,66 @@ export default function PostsPage() {
 
   if (loading) return <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}><div className="loader" /></div>;
 
+  const filterMap: Record<string, (p: Post) => boolean> = {
+    all: () => true,
+    pending: (p) => p.status === "pending_approval" || p.status === "approved" || p.status === "draft",
+    published: (p) => p.status === "published",
+    rejected: (p) => p.status === "rejected" || p.status === "failed",
+  };
+  const filteredPosts = posts.filter(filterMap[filter]);
+  const pendingCount = posts.filter(p => p.status === "pending_approval" || p.status === "approved").length;
+  const publishedCount = posts.filter(p => p.status === "published").length;
+  const rejectedCount = posts.filter(p => p.status === "rejected" || p.status === "failed").length;
+
+  async function handleEnsureBuffer() {
+    setBufferLoading(true);
+    try {
+      await fetch("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ensure_buffer" }) });
+      await loadPosts();
+    } catch { /* ignore */ }
+    finally { setBufferLoading(false); }
+  }
+
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 700 }}>📝 Publications</h1>
-        <span style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>{posts.length} post{posts.length !== 1 ? "s" : ""}</span>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <span style={{ fontSize: "0.75rem", color: pendingCount < 5 ? "var(--warning)" : "var(--success)" }}>
+            {pendingCount}/5 en attente
+          </span>
+          <button className="btn btn-outline" onClick={handleEnsureBuffer} disabled={bufferLoading} style={{ fontSize: "0.75rem" }}>
+            {bufferLoading ? "⏳ Génération..." : "🔄 Remplir le buffer"}
+          </button>
+        </div>
       </div>
 
-      {posts.length === 0 ? (
+      {/* Filter tabs */}
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+        {([
+          { id: "all" as const, label: "Tous", count: posts.length },
+          { id: "pending" as const, label: "⏳ En attente", count: pendingCount },
+          { id: "published" as const, label: "✅ Publiés", count: publishedCount },
+          { id: "rejected" as const, label: "❌ Rejetés", count: rejectedCount },
+        ]).map(tab => (
+          <button key={tab.id}
+            className={`btn ${filter === tab.id ? "btn-primary" : "btn-outline"}`}
+            onClick={() => setFilter(tab.id)}
+            style={{ fontSize: "0.8125rem" }}
+          >
+            {tab.label} ({tab.count})
+          </button>
+        ))}
+      </div>
+
+      {filteredPosts.length === 0 ? (
         <div className="card" style={{ textAlign: "center", padding: "3rem" }}>
           <p style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>📭</p>
           <p style={{ color: "var(--muted)" }}>Aucun post encore. Lancez un workflow pour générer votre premier post !</p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {posts.map(post => {
+          {filteredPosts.map(post => {
             const isExpanded = expandedId === post.id;
 
             return (

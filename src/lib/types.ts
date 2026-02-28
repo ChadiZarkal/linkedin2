@@ -2,10 +2,11 @@
 
 // ─── Available LLM Models ───
 export const AVAILABLE_MODELS = [
-  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro", description: "Dernière génération, le plus avancé" },
-  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro", description: "Très performant, raisonnement avancé" },
-  { id: "gemini-3-flash-preview", name: "Gemini 3 Flash", description: "Rapide et puissant" },
-  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Rapide et efficace" },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", description: "Rapide et fiable, région globale" },
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Flash dernière gen, rapide" },
+  { id: "gemini-3-flash-preview", name: "Gemini 3 Flash", description: "Rapide et puissant (preview)" },
+  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro", description: "Très performant (preview)" },
+  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro", description: "Dernière génération, le plus avancé (preview)" },
 ];
 
 // ─── Prompt Modes ───
@@ -34,7 +35,21 @@ export interface TopicSuggestion {
 }
 
 // ─── Workflow Mode ───
-export type WorkflowMode = "auto" | "interactive" | "custom_topic";
+export type WorkflowMode = "auto" | "interactive" | "custom_topic" | "tech_wow";
+
+// ─── Workflow Template (for scheduled workflows) ───
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  // Which days to run (0=Sun..6=Sat), empty = every day
+  scheduleDays: number[];
+  // Custom prompts for this workflow
+  researchPrompt: string;
+  selectorPrompt: string;
+  writerPrompt: string;
+}
 
 // ─── Agent ───
 export interface Agent {
@@ -114,6 +129,10 @@ export interface Settings {
     urn: string;
     email: string;
   };
+  // Which workflow mode the cron uses
+  cronWorkflowMode: string; // "tech_wow" | "auto" | template id
+  // Minimum pending posts buffer
+  minPendingBuffer: number; // default 5
 }
 
 // ─── Workflow ───

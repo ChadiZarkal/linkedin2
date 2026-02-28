@@ -1,10 +1,10 @@
 // src/app/api/workflow/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { readCollection } from "@/lib/db";
-import { stepResearch, stepGenerate, stepOrchestrate, runFullWorkflow, revisePost } from "@/lib/workflow";
+import { stepResearch, stepGenerate, stepOrchestrate, runFullWorkflow, revisePost, runTechWowWorkflow, ensurePostBuffer } from "@/lib/workflow";
 import type { WorkflowRun } from "@/lib/types";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET() {
   const runs = readCollection<WorkflowRun>("workflow_runs").sort(
@@ -51,6 +51,18 @@ export async function POST(req: NextRequest) {
           includeImages: body.includeImages ?? false,
         });
         return NextResponse.json(result, { status: 201 });
+      }
+
+      // ─── Tech Wow: Advanced AI vulgarization workflow ───
+      case "tech_wow": {
+        const result = await runTechWowWorkflow({ model: body.model });
+        return NextResponse.json(result, { status: 201 });
+      }
+
+      // ─── Ensure post buffer ───
+      case "ensure_buffer": {
+        const result = await ensurePostBuffer(body.minBuffer);
+        return NextResponse.json(result, { status: 200 });
       }
 
       // ─── Revise: Re-generate with user feedback ───

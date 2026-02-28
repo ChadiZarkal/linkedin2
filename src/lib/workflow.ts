@@ -164,7 +164,7 @@ export async function stepGenerate(options: {
   includeImages?: boolean;
 }): Promise<WorkflowRun> {
   const settings = getSettings();
-  const model = options.model || settings.globalModel || "gemini-2.5-flash";
+  const model = options.model || settings.globalModel || "gemini-2.0-flash";
   const runs = readCollection<WorkflowRun>("workflow_runs");
   const workflowRun = runs.find((r) => r.id === options.workflowId);
   if (!workflowRun) throw new Error("Workflow non trouvé");
@@ -311,7 +311,7 @@ export async function stepOrchestrate(options: {
   includeImages?: boolean;
 }): Promise<WorkflowRun> {
   const settings = getSettings();
-  const model = options.model || settings.globalModel || "gemini-2.5-flash";
+  const model = options.model || settings.globalModel || "gemini-2.0-flash";
 
   // ─── Step 1: Orchestrator decides pipeline AND tweaks prompts ───
   const orchestratorPrompt = `Tu es un orchestrateur de workflow LinkedIn intelligent.
@@ -547,7 +547,7 @@ export async function revisePost(options: {
   promptModeId?: string;
 }): Promise<{ postId: string; content: string }> {
   const settings = getSettings();
-  const model = options.model || settings.globalModel || "gemini-2.5-flash";
+  const model = options.model || settings.globalModel || "gemini-2.0-flash";
 
   const posts = readCollection<Post>("posts");
   const originalPost = posts.find((p) => p.id === options.postId);
@@ -600,7 +600,7 @@ export async function runFullWorkflow(options?: {
   model?: string;
 }): Promise<WorkflowRun> {
   const settings = getSettings();
-  const model = options?.model || settings.globalModel || "gemini-2.5-flash";
+  const model = options?.model || settings.globalModel || "gemini-2.0-flash";
 
   if (options?.customTopic) {
     return stepOrchestrate({ instruction: options.customTopic, model });
@@ -694,13 +694,309 @@ export function shouldPublishToday(): boolean {
 
   if (!settings.publishSchedule.days.includes(dayOfWeek)) return false;
 
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay());
-  weekStart.setHours(0, 0, 0, 0);
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
 
-  const postsThisWeek = readCollection<Post>("posts").filter(
-    (p) => p.status === "published" && p.publishedAt && new Date(p.publishedAt) >= weekStart
+  const postsToday = readCollection<Post>("posts").filter(
+    (p) => p.status === "published" && p.publishedAt && new Date(p.publishedAt) >= todayStart
   );
 
-  return postsThisWeek.length < settings.postsPerWeek;
+  // Max 1 post per day
+  return postsToday.length === 0;
+}
+
+// ─────────────────────────────────────────────
+// TECH WOW WORKFLOW
+// Finds ultra-advanced AI techniques, picks the most
+// wow-able one, and writes a short punchy post (≤600 words)
+// ─────────────────────────────────────────────
+
+const TECH_WOW_RESEARCH_PROMPT = `Tu es un veilleur expert en intelligence artificielle générative et en techniques de pointe.
+
+Ton rôle : trouver 5 à 8 techniques ULTRA AVANCÉES dans le domaine de l'IA générative.
+
+Ce qu'on cherche :
+- Des techniques pointues, à la frontière de la recherche (ex: Mixture of Experts, Flash Attention, RLHF, DPO, LoRA, RAG avancé, Chain-of-Thought, Constitutional AI, Speculative Decoding, Ring Attention, KV-Cache optimization, Sparse Transformers, State Space Models, etc.)
+- Pas forcément récentes mais ultra spécialisées et peu connues du grand public
+- Toujours dans le domaine de l'IA GÉNÉRATIVE (LLMs, diffusion models, multimodal, etc.)
+- Des techniques qui ont un vrai impact concret et mesurable
+
+Pour chaque technique, fournis :
+1. **title** : Le nom de la technique
+2. **description** : 2-3 phrases expliquant la technique simplement
+3. **angle** : Pourquoi c'est impressionnant / quel problème ça résout
+4. **wowFactor** : Note de 1 à 10 sur l'effet "wow" pour un non-développeur
+5. **vulgarizability** : Note de 1 à 10 sur la facilité à vulgariser
+6. **selfContained** : Note de 1 à 10 — peut-on comprendre sans pré-requis techniques complexes ?
+
+Formate en JSON :
+[
+  {
+    "title": "...",
+    "description": "...",
+    "angle": "...",
+    "category": "ai",
+    "recency": "evergreen",
+    "wowFactor": 8,
+    "vulgarizability": 9,
+    "selfContained": 7
+  }
+]`;
+
+const TECH_WOW_SELECTOR_PROMPT = `Tu es un curateur de contenu LinkedIn spécialisé en IA.
+
+Tu reçois une liste de techniques IA avancées avec des scores de "wow factor", "vulgarisabilité" et "autonomie de compréhension".
+
+Ton rôle : sélectionner LE MEILLEUR sujet en maximisant :
+1. L'effet "wow" — le lecteur doit se dire "ah ouais, c'est dingue !"
+2. La vulgarisabilité — on doit pouvoir l'expliquer simplement en 600 mots max
+3. L'autonomie — pas besoin de comprendre 10 concepts techniques avant
+4. La nouveauté — éviter les sujets trop connus (exit GPT, ChatGPT, etc.)
+
+Réponds en JSON :
+{
+  "selectedTopic": {
+    "title": "...",
+    "description": "...",
+    "angle": "...",
+    "reason": "Pourquoi ce sujet est le plus 'wow'"
+  }
+}`;
+
+const TECH_WOW_WRITER_PROMPT = `Tu es un rédacteur LinkedIn qui vulgarise des techniques d'IA ultra avancées.
+
+OBJECTIF : Créer l'effet "wow". Le lecteur (non-dev ou dev curieux) doit finir le post en se disant "ah ouais, c'est impressionnant ce qu'on peut faire".
+
+RÈGLES STRICTES :
+1. **MAX 600 MOTS** — pas un de plus. Sois concis.
+2. **ZERO bullshit** — pas de phrases creuses, pas de "dans un monde en constante évolution", pas de buzzwords vides
+3. **Accroche percutante** — la première phrase doit créer la curiosité
+4. **Structure simple** :
+   - Hook (1-2 lignes) : pose le décor, intrigue
+   - Le concept (2-3 paragraphes courts) : qu'est-ce que cette technique ? Que permet-elle ?
+   - Le "wow moment" : le truc qui impressionne, le résultat concret
+   - Conclusion courte : pourquoi c'est important
+5. **Langage accessible** — un non-développeur doit comprendre. Pas de maths, pas de code, pas de jargon non expliqué
+6. **Exemples concrets** — montre ce que ça permet dans la vraie vie
+7. **Format LinkedIn** : phrases courtes, sauts de ligne, aéré, lisible en 1-2 minutes
+8. **Emojis** : 2-4 max, utilisés à bon escient
+9. **Hashtags** : 3-4 à la fin (#IA #Tech #Innovation etc.)
+10. **PAS de lien**
+11. En FRANÇAIS
+
+Le ton : passionné, pédagogue, direct. Comme si tu expliquais un truc dingue à un pote intelligent mais non-technique.
+
+IMPORTANT : Fournis UNIQUEMENT le texte du post LinkedIn, prêt à publier. Rien d'autre.`;
+
+export async function runTechWowWorkflow(options?: {
+  model?: string;
+}): Promise<WorkflowRun> {
+  const settings = getSettings();
+  const model = options?.model || settings.globalModel || "gemini-2.0-flash";
+
+  const workflowRun = makeEmptyRun("tech_wow");
+  workflowRun.currentStep = "researcher";
+  addToCollection("workflow_runs", workflowRun);
+
+  const agentLogs: AgentLog[] = [];
+
+  // Get recent topics for deduplication
+  const recentTopics = getRecentTopics(50);
+  const dedupeContext = recentTopics.length > 0
+    ? `\n\nSujets DÉJÀ TRAITÉS (NE PAS les reproposer, cherche des sujets DIFFÉRENTS) :\n${recentTopics.map(t => `- ${t.title}`).join("\n")}`
+    : "";
+
+  // ─── Step 1: Research advanced AI techniques ───
+  const researchStep: WorkflowStep = {
+    agentId: "tech-wow-researcher", agentName: "🔬 Chercheur Tech Wow",
+    status: "running", input: "Recherche de techniques IA avancées", output: "",
+    startedAt: new Date().toISOString(), completedAt: null,
+  };
+  workflowRun.steps.push(researchStep);
+  updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+
+  let topics: TopicSuggestion[] = [];
+  try {
+    const researchResult = await generateWithSearch(
+      `${TECH_WOW_RESEARCH_PROMPT}${dedupeContext}`,
+      model
+    );
+    researchStep.output = researchResult.text.slice(0, 5000);
+    researchStep.status = "completed";
+    researchStep.completedAt = new Date().toISOString();
+    agentLogs.push({ agentId: "tech-wow-researcher", agentName: "🔬 Chercheur Tech Wow", input: "Recherche techniques IA", output: researchResult.text.slice(0, 5000), timestamp: new Date().toISOString() });
+
+    try {
+      const cleaned = researchResult.text.replace(/```json\n?|\n?```/g, "").trim();
+      topics = JSON.parse(cleaned);
+    } catch {
+      topics = [{ title: "Technique IA avancée", description: researchResult.text.slice(0, 500), angle: "Vulgarisation", category: "ai", recency: "evergreen" }];
+    }
+    workflowRun.topicSuggestions = topics;
+    updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+  } catch (error) {
+    researchStep.status = "failed";
+    researchStep.output = error instanceof Error ? error.message : String(error);
+    workflowRun.status = "failed";
+    workflowRun.error = researchStep.output;
+    updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+    throw error;
+  }
+
+  // ─── Step 2: Select the best topic ───
+  workflowRun.currentStep = "topic_selector";
+  const selectorStep: WorkflowStep = {
+    agentId: "tech-wow-selector", agentName: "🎯 Sélecteur Wow",
+    status: "running", input: JSON.stringify(topics).slice(0, 2000), output: "",
+    startedAt: new Date().toISOString(), completedAt: null,
+  };
+  workflowRun.steps.push(selectorStep);
+  updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+
+  let selectedTopic: TopicSuggestion;
+  try {
+    const selectorInput = `${TECH_WOW_SELECTOR_PROMPT}\n\nVoici les sujets proposés :\n${JSON.stringify(topics, null, 2)}${dedupeContext}`;
+    const selectorResult = await generateContent(selectorInput, model);
+    selectorStep.output = selectorResult.slice(0, 5000);
+    selectorStep.status = "completed";
+    selectorStep.completedAt = new Date().toISOString();
+    agentLogs.push({ agentId: "tech-wow-selector", agentName: "🎯 Sélecteur Wow", input: JSON.stringify(topics).slice(0, 2000), output: selectorResult.slice(0, 5000), timestamp: new Date().toISOString() });
+
+    try {
+      const parsed = JSON.parse(selectorResult.replace(/```json\n?|\n?```/g, "").trim());
+      const sel = parsed.selectedTopic || parsed;
+      selectedTopic = { title: sel.title, description: sel.description, angle: sel.angle || sel.reason || "", category: "ai", recency: "evergreen" };
+    } catch {
+      // Fallback: pick the topic with highest composite score
+      const scored = topics.map((t: TopicSuggestion & { wowFactor?: number; vulgarizability?: number; selfContained?: number }) => ({
+        ...t,
+        score: ((t.wowFactor || 5) + (t.vulgarizability || 5) + (t.selfContained || 5)) / 3
+      }));
+      scored.sort((a, b) => b.score - a.score);
+      selectedTopic = scored[0] || topics[0];
+    }
+    updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+  } catch (error) {
+    selectorStep.status = "failed";
+    workflowRun.status = "failed";
+    workflowRun.error = error instanceof Error ? error.message : String(error);
+    updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+    throw error;
+  }
+
+  // Save topic for deduplication
+  const topic: Topic = {
+    id: generateId(), title: selectedTopic.title, description: selectedTopic.description,
+    sources: [], category: "ai", recency: "evergreen", status: "used",
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  addToCollection("topics", topic);
+  workflowRun.topicId = topic.id;
+
+  // ─── Step 3: Write the post ───
+  workflowRun.currentStep = "writer";
+  const topicText = `${selectedTopic.title}\n${selectedTopic.description}\nAngle: ${selectedTopic.angle}`;
+  const writerStep: WorkflowStep = {
+    agentId: "tech-wow-writer", agentName: "✍️ Rédacteur Tech Wow",
+    status: "running", input: topicText.slice(0, 2000), output: "",
+    startedAt: new Date().toISOString(), completedAt: null,
+  };
+  workflowRun.steps.push(writerStep);
+  updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+
+  let finalPost = "";
+  try {
+    const writerInput = `${TECH_WOW_WRITER_PROMPT}\n\nSujet à vulgariser :\nTitre : ${selectedTopic.title}\nDescription : ${selectedTopic.description}\nAngle : ${selectedTopic.angle}\n\nÉcris le post LinkedIn (max 600 mots, effet wow, zéro bullshit).`;
+    finalPost = await generateContent(writerInput, model);
+    writerStep.output = finalPost.slice(0, 5000);
+    writerStep.status = "completed";
+    writerStep.completedAt = new Date().toISOString();
+    agentLogs.push({ agentId: "tech-wow-writer", agentName: "✍️ Rédacteur Tech Wow", input: topicText.slice(0, 2000), output: finalPost.slice(0, 5000), timestamp: new Date().toISOString() });
+    updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+  } catch (error) {
+    writerStep.status = "failed";
+    workflowRun.status = "failed";
+    workflowRun.error = error instanceof Error ? error.message : String(error);
+    updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+    throw error;
+  }
+
+  // ─── Save post ───
+  const post: Post = {
+    id: generateId(), topicId: workflowRun.topicId, content: finalPost,
+    status: settings.autoPublish ? "approved" : "pending_approval",
+    tone: "tech_wow", linkedinPostId: null, imageUrl: null, imageSuggestions: [],
+    agentLogs, scheduledAt: null, publishedAt: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  addToCollection("posts", post);
+
+  // Auto-publish if enabled
+  if (settings.autoPublish) {
+    const formattedPost = formatForLinkedIn(finalPost);
+    const result = await publishToLinkedIn(formattedPost);
+    if (result.success) {
+      updateInCollection<Post>("posts", post.id, { status: "published", linkedinPostId: result.id, publishedAt: new Date().toISOString() });
+    }
+  }
+
+  workflowRun.postId = post.id;
+  workflowRun.status = "completed";
+  workflowRun.completedAt = new Date().toISOString();
+  updateInCollection("workflow_runs", workflowRun.id, workflowRun);
+  return workflowRun;
+}
+
+// ─────────────────────────────────────────────
+// ENSURE POST BUFFER
+// Makes sure there are at least N pending posts
+// ─────────────────────────────────────────────
+export async function ensurePostBuffer(minBuffer?: number): Promise<{ generated: number; total: number }> {
+  const settings = getSettings();
+  const buffer = minBuffer || settings.minPendingBuffer || 5;
+  const posts = readCollection<Post>("posts");
+  const pendingPosts = posts.filter(p => p.status === "pending_approval" || p.status === "approved");
+  const needed = buffer - pendingPosts.length;
+
+  if (needed <= 0) {
+    return { generated: 0, total: pendingPosts.length };
+  }
+
+  let generated = 0;
+  const model = settings.globalModel || "gemini-2.0-flash";
+  const workflowMode = settings.cronWorkflowMode || "tech_wow";
+
+  // Generate posts one at a time to avoid rate limiting
+  for (let i = 0; i < needed; i++) {
+    try {
+      if (workflowMode === "tech_wow") {
+        await runTechWowWorkflow({ model });
+      } else {
+        await runFullWorkflow({ model });
+      }
+      generated++;
+    } catch (error) {
+      console.error(`Error generating buffer post ${i + 1}/${needed}:`, error);
+      break; // Stop on first error to avoid cascading failures
+    }
+  }
+
+  return { generated, total: pendingPosts.length + generated };
+}
+
+// ─────────────────────────────────────────────
+// PUBLISH NEXT PENDING POST
+// Publishes the oldest approved/pending post
+// ─────────────────────────────────────────────
+export async function publishNextPending(): Promise<{ success: boolean; postId?: string; error?: string }> {
+  const posts = readCollection<Post>("posts")
+    .filter(p => p.status === "approved" || p.status === "pending_approval")
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  if (posts.length === 0) {
+    return { success: false, error: "No pending posts to publish" };
+  }
+
+  const post = posts[0];
+  return publishPost(post.id);
 }

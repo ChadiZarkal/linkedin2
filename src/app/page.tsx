@@ -8,7 +8,7 @@ interface Workflow { startedAt: string; status: string; }
 interface Settings { postsPerWeek: number; }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ published: 0, pending: 0, total: 0, agents: 0, thisWeek: 0, maxWeek: 3, lastRun: "" });
+  const [stats, setStats] = useState({ published: 0, pending: 0, total: 0, agents: 0, thisWeek: 0, maxWeek: 7, lastRun: "", rejected: 0 });
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState("");
@@ -30,12 +30,13 @@ export default function Dashboard() {
       const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); weekStart.setHours(0,0,0,0);
       setStats({
         published: p.filter((x: Post) => x.status === "published").length,
-        pending: p.filter((x: Post) => x.status === "pending_approval").length,
+        pending: p.filter((x: Post) => x.status === "pending_approval" || x.status === "approved").length,
         total: p.length,
         agents: a.filter((x: Agent) => x.enabled).length,
         thisWeek: p.filter((x: Post) => x.status === "published" && x.publishedAt && new Date(x.publishedAt) >= weekStart).length,
-        maxWeek: (settings as Settings).postsPerWeek || 3,
+        maxWeek: (settings as Settings).postsPerWeek || 7,
         lastRun: w.length > 0 ? (w as Workflow[])[0].startedAt : "",
+        rejected: p.filter((x: Post) => x.status === "rejected").length,
       });
     } catch { /* ignore */ } finally { setLoading(false); }
   }
@@ -43,9 +44,9 @@ export default function Dashboard() {
   async function triggerWorkflow() {
     setGenerating(true); setMessage("");
     try {
-      const res = await fetch("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "tech_wow" }) });
       const result = await res.json();
-      if (result.status === "completed") setMessage("✅ Post généré avec succès !");
+      if (result.status === "completed") setMessage("✅ Post Tech Wow généré avec succès !");
       else if (result.status === "failed") setMessage("❌ Erreur: " + result.error);
       else setMessage("⏳ Workflow en cours...");
       loadData();
@@ -62,16 +63,17 @@ export default function Dashboard() {
           <p style={{ color: "var(--muted)", fontSize: "0.875rem", marginTop: 4 }}>Vue d&apos;ensemble LinkedIn AutoPilot</p>
         </div>
         <button className="btn btn-primary" onClick={triggerWorkflow} disabled={generating}>
-          {generating ? <><div className="loader" style={{ width: 16, height: 16, borderWidth: 2 }} /> Génération...</> : "⚡ Générer un post"}
+          {generating ? <><div className="loader" style={{ width: 16, height: 16, borderWidth: 2 }} /> Génération...</> : "🔬 Générer un Tech Wow"}
         </button>
       </div>
 
       {message && <div className="card" style={{ marginBottom: "1.5rem", borderColor: message.includes("✅") ? "var(--success)" : "var(--danger)" }}>{message}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-        <StatCard label="Cette semaine" value={`${stats.thisWeek}/${stats.maxWeek}`} sub="posts publiés" />
-        <StatCard label="En attente" value={stats.pending} sub="à approuver" color="var(--warning)" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+        <StatCard label="Buffer" value={`${stats.pending}/5`} sub="posts en attente" color={stats.pending < 5 ? "var(--warning)" : "var(--success)"} />
+        <StatCard label="Aujourd'hui" value={`${stats.thisWeek}`} sub="cette semaine" />
         <StatCard label="Total publié" value={stats.published} sub="publications" color="var(--success)" />
+        <StatCard label="Rejetés" value={stats.rejected} sub="posts refusés" color={stats.rejected > 0 ? "var(--danger)" : "var(--muted)"} />
         <StatCard label="Agents actifs" value={stats.agents} sub="agents IA" color="var(--primary)" />
       </div>
 

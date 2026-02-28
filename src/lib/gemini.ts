@@ -15,7 +15,7 @@ function getClient(): GoogleGenAI {
 
   const credentials = getCredentials();
   const project = process.env.GOOGLE_CLOUD_PROJECT || "ai-agent-cha-2y53";
-  const location = process.env.GOOGLE_CLOUD_LOCATION || "europe-west1";
+  const location = process.env.GOOGLE_CLOUD_LOCATION || "global";
 
   clientInstance = new GoogleGenAI({
     vertexai: true,
@@ -36,7 +36,7 @@ export async function generateContent(
   systemInstruction?: string
 ): Promise<string> {
   const client = getClient();
-  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.5-pro";
+  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
   const config: Record<string, unknown> = {};
   if (systemInstruction) {
@@ -58,7 +58,7 @@ export async function generateWithSearch(
   systemInstruction?: string
 ): Promise<{ text: string; sources: string[] }> {
   const client = getClient();
-  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.5-pro";
+  const modelName = model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
   const config: Record<string, unknown> = {
     tools: [{ googleSearch: {} }],

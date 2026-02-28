@@ -12,6 +12,8 @@ interface Settings {
   topicPreferences: { recency: string; categories: string[]; customInstructions: string; };
   publishSchedule: { days: number[]; timeSlots: string[]; timezone: string; };
   linkedinProfile: { name: string; urn: string; email: string; };
+  cronWorkflowMode: string;
+  minPendingBuffer: number;
 }
 
 const DAYS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
@@ -195,6 +197,22 @@ export default function SettingsPage() {
             <span style={{ fontSize: "0.875rem" }}>Approbation auto des sujets</span>
           </label>
         </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--card-border)" }}>
+          <div>
+            <label style={{ fontSize: "0.8125rem", color: "var(--muted)", display: "block", marginBottom: 8 }}>🔬 Workflow du cron</label>
+            <select value={settings.cronWorkflowMode || "tech_wow"} onChange={e => setSettings({ ...settings, cronWorkflowMode: e.target.value })}>
+              <option value="tech_wow">🔬 Tech Wow (IA vulgarisée)</option>
+              <option value="auto">🤖 Automatique (recherche générale)</option>
+            </select>
+            <p style={{ fontSize: "0.6875rem", color: "var(--muted)", marginTop: 4 }}>Le workflow que le cron exécute chaque jour</p>
+          </div>
+          <div>
+            <label style={{ fontSize: "0.8125rem", color: "var(--muted)", display: "block", marginBottom: 8 }}>📦 Buffer minimum</label>
+            <input type="number" min={1} max={20} value={settings.minPendingBuffer || 5} onChange={e => setSettings({ ...settings, minPendingBuffer: parseInt(e.target.value) || 5 })} style={{ width: 100 }} />
+            <p style={{ fontSize: "0.6875rem", color: "var(--muted)", marginTop: 4 }}>Posts en attente à maintenir en permanence</p>
+          </div>
+        </div>
       </div>
 
       {/* ─── Tone & Content ─── */}
@@ -251,15 +269,15 @@ export default function SettingsPage() {
       <div className="card" style={{ marginBottom: "1rem" }}>
         <h2 style={{ fontWeight: 600, marginBottom: "1rem" }}>🔄 Publication automatique (Vercel Cron)</h2>
         <p style={{ fontSize: "0.8125rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: "0.75rem" }}>
-          Une fois déployé sur Vercel, un <strong>cron job</strong> se déclenche automatiquement selon le planning configuré dans <code>vercel.json</code>. 
-          <strong> L'application fonctionne même quand votre PC est éteint.</strong>
+          Le <strong>cron Vercel</strong> tourne <strong>chaque jour à 8h UTC</strong>. Il fait 3 choses :
         </p>
-        <p style={{ fontSize: "0.8125rem", color: "var(--muted)", lineHeight: 1.6 }}>
-          Le cron vérifie le jour, l'horaire et le quota hebdomadaire avant de publier. 
-          Pour modifier l'heure du cron, éditez le fichier <code>vercel.json</code> → <code>"schedule": "0 8 * * 1-5"</code> (format crontab UTC).
-        </p>
+        <ol style={{ fontSize: "0.8125rem", color: "var(--muted)", lineHeight: 1.8, paddingLeft: "1.25rem", marginBottom: "0.75rem" }}>
+          <li>📤 Publie les posts programmés dont l&apos;heure est passée</li>
+          <li>🚀 Si auto-publish ON : publie le post le plus ancien en attente</li>
+          <li>📦 Génère de nouveaux posts pour maintenir le buffer</li>
+        </ol>
         <p style={{ fontSize: "0.75rem", color: "var(--warning)", marginTop: 8 }}>
-          ⚠️ Vercel Hobby = 1 cron/jour max. Vercel Pro = jusqu'à 1/minute.
+          ⚠️ Vercel Hobby = 1 cron/jour max. Vercel Pro = jusqu&apos;à 1/minute.
         </p>
       </div>
 

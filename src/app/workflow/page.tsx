@@ -56,7 +56,7 @@ function formatPreview(text: string): string {
 
 export default function WorkflowPage() {
   const [step, setStep] = useState<FlowStep>("config");
-  const [mode, setMode] = useState<"interactive" | "auto" | "custom">("interactive");
+  const [mode, setMode] = useState<"interactive" | "auto" | "custom" | "tech_wow">("tech_wow");
   const [recency, setRecency] = useState("week");
   const [categories, setCategories] = useState<string[]>(["ai", "tech"]);
   const [customTopic, setCustomTopic] = useState("");
@@ -190,6 +190,22 @@ export default function WorkflowPage() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); setStep("config"); }
   }
 
+  // ─── TECH WOW ───
+  async function launchTechWow() {
+    setError(""); setStep("generating");
+    try {
+      const res = await fetch("/api/workflow", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tech_wow", model: getModelParam() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur");
+      setResult(data);
+      if (data.postId) await loadPost(data.postId);
+      setStep("result"); loadHistory();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); setStep("config"); }
+  }
+
   // ─── REVISE ───
   async function handleRevise() {
     if (!post || !revisionText.trim()) return;
@@ -278,6 +294,7 @@ export default function WorkflowPage() {
             <label style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 10 }}>Mode de workflow</label>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               {([
+                { id: "tech_wow" as const, label: "🔬 Tech Wow", desc: "IA avancée vulgarisée (≤600 mots)" },
                 { id: "interactive" as const, label: "🔍 Interactif", desc: "Rechercher → Choisir → Générer" },
                 { id: "custom" as const, label: "🧠 Orchestrateur IA", desc: "L'IA adapte le pipeline" },
                 { id: "auto" as const, label: "🤖 Automatique", desc: "L'IA fait tout" },
@@ -371,12 +388,14 @@ export default function WorkflowPage() {
           )}
 
           {/* Images checkbox */}
+          {mode !== "tech_wow" && (
           <div className="card" style={{ marginBottom: "1rem" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.875rem" }}>
               <input type="checkbox" checked={includeImages} onChange={e => setIncludeImages(e.target.checked)} />
               🖼️ Suggérer des images (expérimental)
             </label>
           </div>
+          )}
 
           {/* Advanced overrides (collapsed) */}
           <div className="card" style={{ marginBottom: "1rem" }}>
@@ -413,6 +432,11 @@ export default function WorkflowPage() {
 
           {/* Launch */}
           <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+            {mode === "tech_wow" && (
+              <button className="btn btn-success" onClick={launchTechWow} style={{ padding: "0.75rem 2rem", fontSize: "1rem" }}>
+                🔬 Lancer Tech Wow
+              </button>
+            )}
             {mode === "auto" && (
               <button className="btn btn-success" onClick={launchAuto} style={{ padding: "0.75rem 2rem", fontSize: "1rem" }}>
                 🤖 Lancer le workflow automatique
@@ -429,6 +453,20 @@ export default function WorkflowPage() {
               >🧠 Lancer l&apos;orchestrateur</button>
             )}
           </div>
+
+          {mode === "tech_wow" && (
+            <div className="card" style={{ marginTop: "1.5rem", borderColor: "rgba(16,185,129,0.3)" }}>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--success)", marginBottom: 6 }}>🔬 Mode Tech Wow — Comment ça marche ?</p>
+              <p style={{ fontSize: "0.8125rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: 8 }}>
+                Ce workflow cherche des <strong>techniques ultra avancées en IA générative</strong>, sélectionne la plus impressionnante et vulgarisable, puis rédige un post court (≤600 mots) qui crée l&apos;effet &quot;wow&quot;.
+              </p>
+              <p style={{ fontSize: "0.75rem", color: "var(--muted)", lineHeight: 1.5 }}>
+                🎯 Cible : non-développeurs impressionnés + devs curieux<br/>
+                ⏰ Ce mode tourne <strong>automatiquement chaque jour</strong> via le cron Vercel<br/>
+                📦 Il maintient un buffer de <strong>5 posts en attente</strong> en permanence
+              </p>
+            </div>
+          )}
 
           {mode === "auto" && (
             <div className="card" style={{ marginTop: "1.5rem", opacity: 0.7 }}>

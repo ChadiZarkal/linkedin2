@@ -10,7 +10,7 @@ import {
 } from "./github-storage";
 
 // Collections that must persist across deployments/cold starts
-const PERSISTENT_COLLECTIONS = ["settings", "agents", "topics"];
+const PERSISTENT_COLLECTIONS = ["settings", "agents", "topics", "posts"];
 
 const DATA_DIR =
   process.env.NODE_ENV === "production" ? "/tmp/data" : path.join(process.cwd(), "data");
