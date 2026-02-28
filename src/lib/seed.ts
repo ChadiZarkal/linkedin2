@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS: Settings = {
   id: "settings",
   autoPublish: false,
   pendingBuffer: 5,
-  globalModel: "gemini-2.0-flash",
+  globalModel: "gemini-3.1-pro-preview",
   linkedinProfile: {
     name: "Chadi Zarkal",
     urn: "urn:li:person:_knk8RXHBP",
