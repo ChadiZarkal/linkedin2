@@ -1,11 +1,10 @@
 // src/app/api/cron/route.ts
-// Daily cron - generates posts buffer + auto-publishes if enabled
+// Cron endpoint for Vercel CRON or external cron service
 import { NextRequest, NextResponse } from "next/server";
-import { dailyCron } from "@/lib/workflow";
-
-export const maxDuration = 300;
+import { runFullWorkflow, shouldPublishToday, publishScheduledPosts } from "@/lib/workflow";
 
 export async function GET(req: NextRequest) {
+  // Verify cron secret
   const authHeader = req.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
@@ -13,15 +12,35 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // First: publish any scheduled posts whose time has come
+  let scheduledResult = { published: 0, errors: [] as string[] };
   try {
-    const result = await dailyCron();
+    scheduledResult = await publishScheduledPosts();
+  } catch (e) {
+    console.error("Error publishing scheduled posts:", e);
+  }
+
+  // Then: run the auto workflow if needed
+  if (!shouldPublishToday()) {
     return NextResponse.json({
-      message: "Daily cron completed",
-      ...result,
-      timestamp: new Date().toISOString(),
+      message: "No new publication needed today (quota reached or not a publish day)",
+      published: false,
+      scheduledPublished: scheduledResult.published,
+      scheduledErrors: scheduledResult.errors,
+    });
+  }
+
+  try {
+    const run = await runFullWorkflow();
+    return NextResponse.json({
+      message: "Workflow completed",
+      published: true,
+      runId: run.id,
+      status: run.status,
+      scheduledPublished: scheduledResult.published,
+      scheduledErrors: scheduledResult.errors,
     });
   } catch (error) {
-    console.error("Cron error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 }
