@@ -20,6 +20,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<R
     if (!topic || typeof topic !== 'string') {
       return NextResponse.json({ success: false, error: 'Missing topic' }, { status: 400 });
     }
+    if (topic.length > 500) {
+      return NextResponse.json({ success: false, error: 'Topic trop long (max 500 caractères)' }, { status: 400 });
+    }
 
     const prompts = await getPrompts();
 

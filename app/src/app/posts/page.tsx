@@ -3,17 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/Toast';
 
-interface Post {
-  id: string;
-  topic: string;
-  research: string;
-  content: string;
-  sources: string[];
-  status: string;
-  createdAt: string;
-  scheduledAt?: string;
-  publishedAt?: string;
-}
+import type { Post } from '@/lib/types';
 
 export default function PostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -23,7 +13,7 @@ export default function PostsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
-  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -249,12 +239,12 @@ export default function PostsPage() {
                     {/* Schedule input */}
                     {post.status !== 'published' && (
                       <div className="flex items-center gap-3 flex-wrap">
-                        <input type="datetime-local" value={scheduleDate}
-                          onChange={e => setScheduleDate(e.target.value)}
+                        <input type="datetime-local" value={scheduleDates[post.id] || ''}
+                          onChange={e => setScheduleDates(prev => ({ ...prev, [post.id]: e.target.value }))}
                           className="input w-auto text-xs" />
                         <button
-                          onClick={() => scheduleDate && handleAction(post.id, 'schedule', { scheduledAt: new Date(scheduleDate).toISOString() })}
-                          disabled={!scheduleDate || isLoading}
+                          onClick={() => scheduleDates[post.id] && handleAction(post.id, 'schedule', { scheduledAt: new Date(scheduleDates[post.id]).toISOString() })}
+                          disabled={!scheduleDates[post.id] || isLoading}
                           className="btn btn-primary btn-sm">
                           📅 Programmer
                         </button>
@@ -273,7 +263,7 @@ export default function PostsPage() {
                         <button onClick={() => { setEditingId(post.id); setEditContent(post.content); }}
                           className="btn btn-ghost btn-sm">✏️ Modifier</button>
                       )}
-                      <button onClick={() => { navigator.clipboard.writeText(post.content); toast('Copié !', 'success'); }}
+                      <button onClick={async () => { try { await navigator.clipboard.writeText(post.content); toast('Copié !', 'success'); } catch { toast('Erreur copie', 'error'); } }}
                         className="btn btn-ghost btn-sm">📋 Copier</button>
 
                       {/* Delete with confirmation */}

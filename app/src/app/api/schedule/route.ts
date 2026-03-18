@@ -24,8 +24,8 @@ export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Sc
 }
 
 export async function PUT(req: NextRequest): Promise<NextResponse<ApiResponse<Schedule>>> {
-  const authError2 = requireAuth(req);
-  if (authError2) return authError2;
+  const authError = requireAuth(req);
+  if (authError) return authError;
 
   try {
     const body = await req.json();
@@ -35,7 +35,9 @@ export async function PUT(req: NextRequest): Promise<NextResponse<ApiResponse<Sc
     const days = Array.isArray(body.days) 
       ? body.days.filter((d: unknown) => typeof d === 'number' && d >= 0 && d <= 6)
       : current.days;
-    const time = typeof body.time === 'string' && /^\d{2}:\d{2}$/.test(body.time)
+    const timeValid = typeof body.time === 'string' && /^\d{2}:\d{2}$/.test(body.time);
+    const [tH, tM] = timeValid ? body.time.split(':').map(Number) : [NaN, NaN];
+    const time = timeValid && tH >= 0 && tH <= 23 && tM >= 0 && tM <= 59
       ? body.time : current.time;
     const minBuffer = typeof body.minBuffer === 'number' && body.minBuffer >= 1 && body.minBuffer <= 20
       ? body.minBuffer : current.minBuffer;

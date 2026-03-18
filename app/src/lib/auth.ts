@@ -1,6 +1,6 @@
 // ============================================================
-// Authentication middleware for API routes
-// Uses a simple API_SECRET env var
+// Authentication helper for API routes (defense-in-depth)
+// Middleware handles primary auth; this is a safety net
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -21,12 +21,15 @@ export function requireAuth(req: NextRequest): NextResponse<{success: false; err
     );
   }
 
-  // Check Authorization header or x-api-key header or ?key= query param
+  // Check Authorization header, x-api-key header, or api_key cookie
   const authHeader = req.headers.get('authorization');
   const apiKeyHeader = req.headers.get('x-api-key');
-  const urlKey = req.nextUrl.searchParams.get('key');
+  const cookieKey = req.cookies.get('api_key')?.value;
 
-  const providedKey = authHeader?.replace('Bearer ', '') || apiKeyHeader || urlKey;
+  const providedKey =
+    (authHeader ? authHeader.replace('Bearer ', '') : null) ||
+    apiKeyHeader ||
+    cookieKey;
 
   if (providedKey !== apiSecret) {
     return NextResponse.json(

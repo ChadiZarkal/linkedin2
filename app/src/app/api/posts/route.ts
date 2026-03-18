@@ -28,8 +28,8 @@ export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Po
 }
 
 export async function PUT(req: NextRequest): Promise<NextResponse<ApiResponse<Post>>> {
-  const authError2 = requireAuth(req);
-  if (authError2) return authError2;
+  const authError = requireAuth(req);
+  if (authError) return authError;
 
   try {
     const { id: rawId, action, content, scheduledAt } = await req.json();
@@ -53,11 +53,15 @@ export async function PUT(req: NextRequest): Promise<NextResponse<ApiResponse<Po
         break;
       }
       case 'schedule': {
-        if (!scheduledAt) {
+        if (!scheduledAt || typeof scheduledAt !== 'string') {
           return NextResponse.json({ success: false, error: 'Missing scheduledAt' }, { status: 400 });
         }
+        const schedDate = new Date(scheduledAt);
+        if (isNaN(schedDate.getTime()) || schedDate <= new Date()) {
+          return NextResponse.json({ success: false, error: 'scheduledAt doit être une date future valide' }, { status: 400 });
+        }
         post.status = 'scheduled';
-        post.scheduledAt = scheduledAt;
+        post.scheduledAt = schedDate.toISOString();
         break;
       }
       case 'approve':
@@ -67,7 +71,13 @@ export async function PUT(req: NextRequest): Promise<NextResponse<ApiResponse<Po
         post.status = 'rejected';
         break;
       case 'edit':
-        if (typeof content === 'string') post.content = content;
+        if (typeof content !== 'string' || content.length === 0) {
+          return NextResponse.json({ success: false, error: 'Contenu requis' }, { status: 400 });
+        }
+        if (content.length > 10000) {
+          return NextResponse.json({ success: false, error: 'Contenu trop long (max 10K)' }, { status: 400 });
+        }
+        post.content = content;
         break;
       default:
         return NextResponse.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
@@ -85,8 +95,8 @@ export async function PUT(req: NextRequest): Promise<NextResponse<ApiResponse<Po
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse<ApiResponse>> {
-  const authError3 = requireAuth(req);
-  if (authError3) return authError3;
+  const authError = requireAuth(req);
+  if (authError) return authError;
 
   try {
     const { id: rawId } = await req.json();

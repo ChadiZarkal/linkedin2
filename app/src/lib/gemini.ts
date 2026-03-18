@@ -138,6 +138,31 @@ async function getClient(): Promise<GoogleGenAI> {
 // --- Model ---
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
+// --- Retry helper for transient errors ---
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isRetryable = /429|500|502|503|ECONNRESET|ETIMEDOUT|fetch failed/i.test(msg);
+      
+      if (!isRetryable || attempt === maxRetries - 1) throw err;
+      
+      const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+      console.warn(`Gemini retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${msg.substring(0, 80)}`);
+      await new Promise(r => setTimeout(r, delay));
+      
+      // Invalidate cached client on auth errors
+      if (/401|403|token/i.test(msg)) {
+        cachedClient = null;
+        tokenExpiresAt = 0;
+      }
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 // ============================================================
 // Standard text generation
 // ============================================================
@@ -146,21 +171,23 @@ export async function generateContent(
   systemPrompt?: string,
   model?: string
 ): Promise<string> {
-  const client = await getClient();
-  const modelId = model || DEFAULT_MODEL;
+  return withRetry(async () => {
+    const client = await getClient();
+    const modelId = model || DEFAULT_MODEL;
 
-  const config: Record<string, unknown> = {};
-  if (systemPrompt) {
-    config.systemInstruction = systemPrompt;
-  }
+    const config: Record<string, unknown> = {};
+    if (systemPrompt) {
+      config.systemInstruction = systemPrompt;
+    }
 
-  const response = await client.models.generateContent({
-    model: modelId,
-    contents: prompt,
-    config,
+    const response = await client.models.generateContent({
+      model: modelId,
+      contents: prompt,
+      config,
+    });
+
+    return response.text || '';
   });
-
-  return response.text || '';
 }
 
 // ============================================================
@@ -171,41 +198,43 @@ export async function generateWithSearch(
   systemPrompt?: string,
   model?: string
 ): Promise<{ text: string; sources: string[] }> {
-  const client = await getClient();
-  const modelId = model || DEFAULT_MODEL;
+  return withRetry(async () => {
+    const client = await getClient();
+    const modelId = model || DEFAULT_MODEL;
 
-  const config: Record<string, unknown> = {
-    tools: [{ googleSearch: {} }],
-  };
-  if (systemPrompt) {
-    config.systemInstruction = systemPrompt;
-  }
+    const config: Record<string, unknown> = {
+      tools: [{ googleSearch: {} }],
+    };
+    if (systemPrompt) {
+      config.systemInstruction = systemPrompt;
+    }
 
-  const response = await client.models.generateContent({
-    model: modelId,
-    contents: prompt,
-    config,
-  });
+    const response = await client.models.generateContent({
+      model: modelId,
+      contents: prompt,
+      config,
+    });
 
-  const text = response.text || '';
-  
-  // Extract sources from grounding metadata
-  const sources: string[] = [];
-  try {
-    const candidates = response.candidates;
-    if (candidates && candidates[0]) {
-      const grounding = candidates[0].groundingMetadata;
-      if (grounding?.groundingChunks) {
-        for (const chunk of grounding.groundingChunks) {
-          if (chunk.web?.uri) {
-            sources.push(chunk.web.uri);
+    const text = response.text || '';
+    
+    // Extract sources from grounding metadata
+    const sources: string[] = [];
+    try {
+      const candidates = response.candidates;
+      if (candidates && candidates[0]) {
+        const grounding = candidates[0].groundingMetadata;
+        if (grounding?.groundingChunks) {
+          for (const chunk of grounding.groundingChunks) {
+            if (chunk.web?.uri) {
+              sources.push(chunk.web.uri);
+            }
           }
         }
       }
+    } catch {
+      // Sources extraction is best-effort
     }
-  } catch {
-    // Sources extraction is best-effort
-  }
 
-  return { text, sources: [...new Set(sources)] };
+    return { text, sources: [...new Set(sources)] };
+  });
 }

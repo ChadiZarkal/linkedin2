@@ -24,17 +24,18 @@ export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Pr
 }
 
 export async function PUT(req: NextRequest): Promise<NextResponse<ApiResponse<Prompts>>> {
-  const authError2 = requireAuth(req);
-  if (authError2) return authError2;
+  const authError = requireAuth(req);
+  if (authError) return authError;
 
   try {
     const body = await req.json();
     const current = await getPrompts();
     
-    // Validate: all fields must be strings
-    const research = typeof body.research === 'string' ? body.research : current.research;
-    const writer = typeof body.writer === 'string' ? body.writer : current.writer;
-    const globalPrompt = typeof body.globalPrompt === 'string' ? body.globalPrompt : current.globalPrompt;
+    // Validate: all fields must be strings, max 10K each
+    const MAX_PROMPT = 10000;
+    const research = typeof body.research === 'string' ? body.research.slice(0, MAX_PROMPT) : current.research;
+    const writer = typeof body.writer === 'string' ? body.writer.slice(0, MAX_PROMPT) : current.writer;
+    const globalPrompt = typeof body.globalPrompt === 'string' ? body.globalPrompt.slice(0, MAX_PROMPT) : current.globalPrompt;
     
     const updated: Prompts = { research, writer, globalPrompt };
 

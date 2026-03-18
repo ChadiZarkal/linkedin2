@@ -1,13 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/Toast';
 
-interface Prompts {
-  research: string;
-  writer: string;
-  globalPrompt: string;
-}
+import type { Prompts } from '@/lib/types';
 
 export default function PromptsPage() {
   const [prompts, setPrompts] = useState<Prompts | null>(null);
@@ -18,6 +14,16 @@ export default function PromptsPage() {
   const { toast } = useToast();
 
   useEffect(() => { fetchPrompts(); }, []);
+
+  // Warn on leave with unsaved changes
+  const beforeUnload = useCallback((e: BeforeUnloadEvent) => {
+    if (hasChanges) { e.preventDefault(); }
+  }, [hasChanges]);
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [beforeUnload]);
 
   async function fetchPrompts() {
     try {

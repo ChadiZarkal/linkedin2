@@ -23,6 +23,12 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<P
         { status: 400 }
       );
     }
+    if (typeof topic === 'string' && topic.length > 500) {
+      return NextResponse.json({ success: false, error: 'Topic trop long (max 500)' }, { status: 400 });
+    }
+    if (typeof research === 'string' && research.length > 50000) {
+      return NextResponse.json({ success: false, error: 'Research trop long (max 50K)' }, { status: 400 });
+    }
 
     const prompts = await getPrompts();
 

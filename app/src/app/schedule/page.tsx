@@ -1,16 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/Toast';
 
-interface Schedule {
-  enabled: boolean;
-  days: number[];
-  time: string;
-  autoGenerate: boolean;
-  minBuffer: number;
-  defaultTopic: string;
-}
+import type { Schedule } from '@/lib/types';
 
 const DAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const DAY_FULL = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -24,6 +17,16 @@ export default function SchedulePage() {
   const { toast } = useToast();
 
   useEffect(() => { fetchSchedule(); }, []);
+
+  // Warn on leave with unsaved changes
+  const beforeUnload = useCallback((e: BeforeUnloadEvent) => {
+    if (hasChanges) { e.preventDefault(); }
+  }, [hasChanges]);
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [beforeUnload]);
 
   async function fetchSchedule() {
     try {
@@ -231,9 +234,11 @@ export default function SchedulePage() {
 function getLocalTime(utcTime: string): string {
   try {
     const [h, m] = utcTime.split(':').map(Number);
-    const offset = -new Date().getTimezoneOffset() / 60;
-    const localH = (h + offset + 24) % 24;
-    return `${String(Math.floor(localH)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const offsetMinutes = -new Date().getTimezoneOffset();
+    const totalMinutes = h * 60 + m + offsetMinutes;
+    const localH = ((totalMinutes / 60 | 0) % 24 + 24) % 24;
+    const localM = ((totalMinutes % 60) + 60) % 60;
+    return `${String(localH).padStart(2, '0')}:${String(localM).padStart(2, '0')}`;
   } catch {
     return utcTime;
   }

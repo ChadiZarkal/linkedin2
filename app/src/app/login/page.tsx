@@ -3,30 +3,29 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+function setCookie(key: string) {
+  const secure = location.protocol === 'https:' ? '; secure' : '';
+  document.cookie = `api_key=${encodeURIComponent(key.trim())}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=strict${secure}`;
+}
+
 export default function LoginPage() {
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
-  const [testing, setTesting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!key.trim()) return;
-    document.cookie = `api_key=${key.trim()}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=strict`;
-    router.push('/');
-    router.refresh();
-  }
-
-  async function testKey() {
-    if (!key.trim()) return;
     setError('');
-    setTesting(true);
+    setLoading(true);
     try {
+      // Always validate the key before saving it
       const res = await fetch('/api/prompts', {
         headers: { 'x-api-key': key.trim() },
       });
       if (res.ok) {
-        document.cookie = `api_key=${key.trim()}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=strict`;
+        setCookie(key);
         router.push('/');
         router.refresh();
       } else {
@@ -35,7 +34,7 @@ export default function LoginPage() {
     } catch {
       setError('Erreur de connexion au serveur');
     } finally {
-      setTesting(false);
+      setLoading(false);
     }
   }
 
@@ -62,15 +61,9 @@ export default function LoginPage() {
             <p className="text-red-400 text-xs text-center animate-fadeIn">{error}</p>
           )}
 
-          <div className="flex gap-3">
-            <button type="button" onClick={testKey} disabled={testing || !key.trim()}
-              className="btn btn-ghost flex-1">
-              {testing ? <span className="spinner spinner-accent" /> : 'Tester'}
-            </button>
-            <button type="submit" disabled={!key.trim()} className="btn btn-primary flex-1">
-              Connexion
-            </button>
-          </div>
+          <button type="submit" disabled={loading || !key.trim()} className="btn btn-primary w-full">
+            {loading ? <><span className="spinner" /> Vérification...</> : '🔑 Se connecter'}
+          </button>
         </form>
 
         <p className="text-xs text-[var(--muted)] text-center">

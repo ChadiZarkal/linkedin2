@@ -3,18 +3,7 @@
 import { useState } from 'react';
 import { useToast } from '@/components/Toast';
 
-interface ResearchResult {
-  topic: string;
-  content: string;
-  sources: string[];
-}
-
-interface Post {
-  id: string;
-  topic: string;
-  content: string;
-  status: string;
-}
+import type { ResearchResult, Post } from '@/lib/types';
 
 const TOPIC_SUGGESTIONS = [
   'IA générative 2026',
@@ -153,10 +142,14 @@ export default function GeneratePage() {
     }
   }
 
-  function handleCopy() {
+  async function handleCopy() {
     if (!post) return;
-    navigator.clipboard.writeText(post.content);
-    toast('Copié dans le presse-papier !', 'success');
+    try {
+      await navigator.clipboard.writeText(post.content);
+      toast('Copié dans le presse-papier !', 'success');
+    } catch {
+      toast('Impossible de copier', 'error');
+    }
   }
 
   function reset() {
