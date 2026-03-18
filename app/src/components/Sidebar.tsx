@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Générer', icon: '⚡' },
@@ -12,6 +12,16 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  function handleLogout() {
+    document.cookie = 'api_key=; path=/; max-age=0';
+    router.push('/login');
+    router.refresh();
+  }
+
+  // Don't show sidebar on login page
+  if (pathname === '/login') return null;
 
   return (
     <>
@@ -26,9 +36,9 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
                 pathname === item.href
-                  ? 'bg-[var(--accent)] text-white font-medium'
+                  ? 'bg-[var(--accent)] text-white font-medium shadow-lg shadow-[var(--accent)]/20'
                   : 'text-[var(--muted)] hover:text-white hover:bg-[var(--card)]'
               }`}
             >
@@ -37,6 +47,13 @@ export default function Sidebar() {
             </Link>
           ))}
         </nav>
+        <div className="p-3 border-t border-[var(--border)]">
+          <button onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors w-full">
+            <span className="text-base">🚪</span>
+            Déconnexion
+          </button>
+        </div>
       </aside>
 
       {/* Mobile bottom nav */}
@@ -58,4 +75,5 @@ export default function Sidebar() {
       </nav>
     </>
   );
+
 }

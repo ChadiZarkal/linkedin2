@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useToast } from '@/components/Toast';
 
 interface Schedule {
   enabled: boolean;
@@ -12,12 +13,15 @@ interface Schedule {
 }
 
 const DAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+const DAY_FULL = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 export default function SchedulePage() {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [original, setOriginal] = useState<Schedule | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => { fetchSchedule(); }, []);
 
@@ -25,19 +29,35 @@ export default function SchedulePage() {
     try {
       const res = await fetch('/api/schedule');
       const data = await res.json();
-      if (data.success) setSchedule(data.data);
-    } catch (err) {
-      console.error('Fetch schedule error:', err);
+      if (data.success) {
+        setSchedule(data.data);
+        setOriginal(data.data);
+      } else toast('Erreur chargement', 'error');
+    } catch {
+      toast('Erreur de connexion', 'error');
     } finally {
       setLoading(false);
     }
   }
 
+  function update(patch: Partial<Schedule>) {
+    if (!schedule) return;
+    const updated = { ...schedule, ...patch };
+    setSchedule(updated);
+    setHasChanges(JSON.stringify(updated) !== JSON.stringify(original));
+  }
+
+  function toggleDay(day: number) {
+    if (!schedule) return;
+    const days = schedule.days.includes(day)
+      ? schedule.days.filter(d => d !== day)
+      : [...schedule.days, day].sort();
+    update({ days });
+  }
+
   async function handleSave() {
     if (!schedule) return;
     setSaving(true);
-    setSaved(false);
-
     try {
       const res = await fetch('/api/schedule', {
         method: 'PUT',
@@ -47,174 +67,174 @@ export default function SchedulePage() {
       const data = await res.json();
       if (data.success) {
         setSchedule(data.data);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
+        setOriginal(data.data);
+        setHasChanges(false);
+        toast('Planning sauvegardé !', 'success');
       } else {
-        alert(`Erreur: ${data.error}`);
+        toast(`Erreur: ${data.error}`, 'error');
       }
-    } catch (err) {
-      alert(`Erreur: ${err instanceof Error ? err.message : 'unknown'}`);
+    } catch {
+      toast('Erreur de sauvegarde', 'error');
     } finally {
       setSaving(false);
     }
   }
 
-  function toggleDay(day: number) {
-    if (!schedule) return;
-    const days = schedule.days.includes(day)
-      ? schedule.days.filter(d => d !== day)
-      : [...schedule.days, day].sort();
-    setSchedule({ ...schedule, days });
-  }
-
   if (loading) {
     return (
-      <div className="text-center py-12 text-[var(--muted)]">
-        <div className="w-6 h-6 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin mx-auto mb-3" />
-        Chargement...
+      <div className="space-y-6">
+        <div><h1 className="text-2xl font-bold">Planning</h1></div>
+        {[1, 2, 3].map(i => <div key={i} className="card animate-shimmer h-28 rounded-xl" />)}
       </div>
     );
   }
 
-  if (!schedule) return <p className="text-red-400">Erreur de chargement</p>;
+  if (!schedule) return (
+    <div className="card text-center py-12">
+      <p className="text-red-400">Erreur de chargement</p>
+      <button onClick={fetchSchedule} className="btn btn-primary btn-sm mt-3">Réessayer</button>
+    </div>
+  );
+
+  // Build human-readable summary
+  const activeDays = schedule.days.map(d => DAY_FULL[d]).join(', ');
+  const summary = schedule.enabled
+    ? `Publication automatique ${activeDays || 'aucun jour'} à ${schedule.time} UTC`
+    : 'Publication automatique désactivée';
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between sticky top-0 bg-[var(--background)] py-3 z-10">
         <div>
           <h1 className="text-2xl font-bold">Planning</h1>
-          <p className="text-[var(--muted)] text-sm mt-1">
-            Configuration de la publication automatique. Sauvegardé sur GitHub.
-          </p>
+          <p className="text-[var(--muted)] text-sm mt-1">{summary}</p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-            saved
-              ? 'bg-[var(--success)] text-black'
-              : 'bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50'
-          }`}
-        >
-          {saving ? 'Sauvegarde...' : saved ? '✅ Sauvegardé !' : '💾 Sauvegarder'}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleSave} disabled={saving || !hasChanges}
+            className={`btn btn-sm ${hasChanges ? 'btn-primary' : 'btn-ghost opacity-50'}`}>
+            {saving ? <><span className="spinner" /> Sauvegarde...</> : '💾 Sauvegarder'}
+          </button>
+        </div>
       </div>
 
-      {/* Enable/Disable */}
-      <div className="bg-[var(--card)] rounded-xl p-5 border border-[var(--border)]">
+      {hasChanges && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-2 text-xs text-yellow-400 flex items-center gap-2 animate-fadeIn">
+          <span>⚠️</span> Modifications non sauvegardées
+        </div>
+      )}
+
+      {/* Enable/Disable - BIG toggle */}
+      <div className="card">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold">Publication automatique</h2>
-            <p className="text-xs text-[var(--muted)] mt-1">
-              Publie automatiquement le plus ancien post en attente aux jours et heures définis.
-            </p>
+          <div className="flex items-center gap-4">
+            <span className={`text-3xl ${schedule.enabled ? '' : 'opacity-40'}`}>🤖</span>
+            <div>
+              <h2 className="font-semibold text-lg">Publication automatique</h2>
+              <p className="text-xs text-[var(--muted)] mt-0.5">
+                Publie automatiquement vos posts en attente selon le planning configuré
+              </p>
+            </div>
           </div>
-          <button
-            onClick={() => setSchedule({ ...schedule, enabled: !schedule.enabled })}
-            className={`relative w-12 h-6 rounded-full transition-colors ${
-              schedule.enabled ? 'bg-[var(--success)]' : 'bg-[var(--border)]'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                schedule.enabled ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
+          <button onClick={() => update({ enabled: !schedule.enabled })}
+            className={`toggle ${schedule.enabled ? 'toggle-on' : 'toggle-off'}`}>
+            <span className={`toggle-dot ${schedule.enabled ? 'toggle-dot-on' : 'toggle-dot-off'}`} />
           </button>
         </div>
       </div>
 
       {/* Days */}
-      <div className="bg-[var(--card)] rounded-xl p-5 border border-[var(--border)] space-y-3">
-        <h2 className="font-semibold">Jours de publication</h2>
-        <div className="flex gap-2">
+      <div className={`card space-y-4 transition-opacity ${schedule.enabled ? '' : 'opacity-40 pointer-events-none'}`}>
+        <h2 className="font-semibold">📅 Jours de publication</h2>
+        <div className="grid grid-cols-7 gap-2">
           {DAY_LABELS.map((label, i) => (
-            <button
-              key={i}
-              onClick={() => toggleDay(i)}
-              className={`w-11 h-11 rounded-lg text-xs font-medium transition-colors ${
+            <button key={i} onClick={() => toggleDay(i)}
+              className={`h-12 rounded-lg text-sm font-medium transition-all ${
                 schedule.days.includes(i)
-                  ? 'bg-[var(--accent)] text-white'
+                  ? 'bg-[var(--accent)] text-white shadow-lg shadow-[var(--accent)]/20'
                   : 'bg-[var(--background)] text-[var(--muted)] border border-[var(--border)] hover:border-[var(--accent)]'
-              }`}
-            >
+              }`}>
               {label}
             </button>
           ))}
         </div>
+        <p className="text-xs text-[var(--muted)]">
+          {schedule.days.length === 0 ? 'Aucun jour sélectionné' : `${schedule.days.length} jour${schedule.days.length > 1 ? 's' : ''} par semaine`}
+        </p>
       </div>
 
       {/* Time */}
-      <div className="bg-[var(--card)] rounded-xl p-5 border border-[var(--border)] space-y-3">
-        <h2 className="font-semibold">Heure de publication (UTC)</h2>
-        <input
-          type="time"
-          value={schedule.time}
-          onChange={e => setSchedule({ ...schedule, time: e.target.value })}
-          className="bg-[var(--background)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[var(--accent)]"
-        />
+      <div className={`card space-y-3 transition-opacity ${schedule.enabled ? '' : 'opacity-40 pointer-events-none'}`}>
+        <h2 className="font-semibold">⏰ Heure de publication</h2>
+        <div className="flex items-center gap-4">
+          <input type="time" value={schedule.time}
+            onChange={e => update({ time: e.target.value })}
+            className="input w-auto text-lg font-mono" />
+          <span className="text-xs text-[var(--muted)] bg-[var(--background)] px-3 py-1.5 rounded-lg border border-[var(--border)]">
+            UTC ({schedule.time} UTC = {getLocalTime(schedule.time)} heure locale)
+          </span>
+        </div>
       </div>
 
-      {/* Auto-generate */}
-      <div className="bg-[var(--card)] rounded-xl p-5 border border-[var(--border)] space-y-4">
+      {/* Auto-generate buffer */}
+      <div className={`card space-y-4 transition-opacity ${schedule.enabled ? '' : 'opacity-40 pointer-events-none'}`}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-semibold">Génération automatique de buffer</h2>
+            <h2 className="font-semibold">🔄 Auto-génération de buffer</h2>
             <p className="text-xs text-[var(--muted)] mt-1">
-              Génère automatiquement des posts quand le buffer descend sous le minimum.
+              Quand le nombre de posts en attente est trop bas, génère automatiquement de nouveaux posts
             </p>
           </div>
-          <button
-            onClick={() => setSchedule({ ...schedule, autoGenerate: !schedule.autoGenerate })}
-            className={`relative w-12 h-6 rounded-full transition-colors ${
-              schedule.autoGenerate ? 'bg-[var(--success)]' : 'bg-[var(--border)]'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                schedule.autoGenerate ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
+          <button onClick={() => update({ autoGenerate: !schedule.autoGenerate })}
+            className={`toggle ${schedule.autoGenerate ? 'toggle-on' : 'toggle-off'}`}>
+            <span className={`toggle-dot ${schedule.autoGenerate ? 'toggle-dot-on' : 'toggle-dot-off'}`} />
           </button>
         </div>
 
         {schedule.autoGenerate && (
-          <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+          <div className="space-y-4 pt-3 border-t border-[var(--border)] animate-fadeIn">
             <div>
-              <label className="text-xs font-medium text-[var(--muted)]">Buffer minimum</label>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={schedule.minBuffer}
-                onChange={e => setSchedule({ ...schedule, minBuffer: parseInt(e.target.value) || 3 })}
-                className="mt-1 w-20 bg-[var(--background)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--accent)]"
-              />
+              <label className="text-xs font-medium text-[var(--muted)] block mb-2">Buffer minimum de posts en attente</label>
+              <div className="flex items-center gap-3">
+                <button onClick={() => update({ minBuffer: Math.max(1, schedule.minBuffer - 1) })}
+                  className="btn btn-ghost btn-sm w-10 h-10 !p-0">−</button>
+                <span className="text-2xl font-bold w-8 text-center">{schedule.minBuffer}</span>
+                <button onClick={() => update({ minBuffer: Math.min(20, schedule.minBuffer + 1) })}
+                  className="btn btn-ghost btn-sm w-10 h-10 !p-0">+</button>
+                <span className="text-xs text-[var(--muted)]">posts</span>
+              </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-[var(--muted)]">Sujet par défaut pour la génération auto</label>
-              <input
-                type="text"
-                value={schedule.defaultTopic}
-                onChange={e => setSchedule({ ...schedule, defaultTopic: e.target.value })}
-                className="mt-1 w-full bg-[var(--background)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--accent)]"
-              />
+              <label className="text-xs font-medium text-[var(--muted)] block mb-2">Sujet par défaut pour la génération automatique</label>
+              <input type="text" value={schedule.defaultTopic}
+                onChange={e => update({ defaultTopic: e.target.value })}
+                className="input" placeholder="Ex: intelligence artificielle et innovation tech" />
             </div>
           </div>
         )}
       </div>
 
-      {/* Info */}
-      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-sm text-blue-300">
-        <p className="font-medium mb-1">ℹ️ Comment ça marche</p>
-        <ul className="text-xs space-y-1 text-blue-300/80">
-          <li>• Le cron Vercel appelle <code>/api/cron</code> toutes les heures</li>
-          <li>• S&apos;il y a des posts programmés dont l&apos;heure est passée → publiés automatiquement</li>
-          <li>• Si c&apos;est un jour de publication et qu&apos;aucun post n&apos;a été publié aujourd&apos;hui → le plus ancien post en attente est publié</li>
-          <li>• Si le buffer est activé et trop bas → de nouveaux posts sont générés automatiquement</li>
-          <li>• Toute l&apos;activité est sauvegardée sur GitHub</li>
-        </ul>
+      {/* How it works */}
+      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-5 text-sm text-blue-300">
+        <p className="font-medium mb-3">ℹ️ Comment ça marche</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-blue-300/80">
+          <div className="flex gap-2"><span>1️⃣</span><span>Le cron Vercel appelle <code className="bg-blue-500/20 px-1 rounded">/api/cron</code> toutes les heures</span></div>
+          <div className="flex gap-2"><span>2️⃣</span><span>Les posts programmés dont l&apos;heure est passée sont publiés</span></div>
+          <div className="flex gap-2"><span>3️⃣</span><span>Si c&apos;est un jour de publication → le plus ancien post en attente est publié</span></div>
+          <div className="flex gap-2"><span>4️⃣</span><span>Si le buffer est activé et trop bas → nouveaux posts générés</span></div>
+        </div>
       </div>
     </div>
   );
+}
+
+function getLocalTime(utcTime: string): string {
+  try {
+    const [h, m] = utcTime.split(':').map(Number);
+    const offset = -new Date().getTimezoneOffset() / 60;
+    const localH = (h + offset + 24) % 24;
+    return `${String(Math.floor(localH)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  } catch {
+    return utcTime;
+  }
 }
