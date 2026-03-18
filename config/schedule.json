@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "days": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "time": "09:00",
+  "autoGenerate": false,
+  "minBuffer": 3,
+  "defaultTopic": "intelligence artificielle et innovation tech"
+}
