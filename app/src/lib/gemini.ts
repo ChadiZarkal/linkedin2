@@ -1,144 +1,82 @@
 // ============================================================
-// Gemini AI - Dual auth support:
-// Mode 1: GEMINI_API_KEY → Google AI (simple, recommended)
-// Mode 2: GOOGLE_SERVICE_ACCOUNT_KEY → Vertex AI (enterprise)
+// Gemini AI via Vertex AI
+// Auth: GOOGLE_SERVICE_ACCOUNT_KEY (service account JSON)
+// Uses @google/genai with googleAuthOptions — no manual JWT
 // ============================================================
 
 import { GoogleGenAI } from '@google/genai';
+import type { GoogleAuthOptions } from 'google-auth-library';
 
-// --- Client management ---
-let cachedClient: GoogleGenAI | null = null;
-let tokenExpiresAt = 0;
-let authMode: 'apikey' | 'vertex' | null = null;
-
-function getAuthMode(): 'apikey' | 'vertex' {
-  if (process.env.GEMINI_API_KEY) return 'apikey';
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) return 'vertex';
-  throw new Error('No Gemini credentials configured. Set GEMINI_API_KEY or GOOGLE_SERVICE_ACCOUNT_KEY');
-}
-
-// --- Mode 1: Simple API Key (Google AI Studio) ---
-function getApiKeyClient(): GoogleGenAI {
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-}
-
-// --- Mode 2: Vertex AI with Service Account ---
-async function getAccessToken(): Promise<string> {
-  let raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY!;
-  
-  // Strip surrounding quotes if Vercel env pull adds them
-  if (raw.startsWith('"') && raw.endsWith('"')) {
-    raw = raw.slice(1, -1);
-  }
-
-  let sa;
-  try {
-    // dotenv may convert \n to real newlines in quoted values
-    // JSON doesn't allow literal newlines in strings, so escape them back
-    const sanitized = raw.replace(/\n/g, '\\n');
-    sa = JSON.parse(sanitized);
-  } catch {
-    // If env var is a file path, read the file
-    try {
-      const fs = await import('fs');
-      sa = JSON.parse(fs.readFileSync(raw.trim(), 'utf-8'));
-    } catch {
-      throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON and not a readable file path');
-    }
-  }
-  // Ensure private_key has real newlines for PEM format
-  if (sa.private_key && typeof sa.private_key === 'string') {
-    sa.private_key = sa.private_key.replace(/\\n/g, '\n');
-  }
-
-  // Try google-auth-library first (more robust)
-  try {
-    const { GoogleAuth } = await import('google-auth-library');
-    const auth = new GoogleAuth({
-      credentials: { client_email: sa.client_email, private_key: sa.private_key },
-      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-    });
-    const client = await auth.getClient();
-    const tokenRes = await client.getAccessToken();
-    if (tokenRes?.token) {
-      tokenExpiresAt = Date.now() + 50 * 60 * 1000;
-      return tokenRes.token;
-    }
-  } catch {
-    // Fall through to manual JWT
-  }
-
-  // Manual JWT fallback
-  const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
-  const now = Math.floor(Date.now() / 1000);
-  const claim = Buffer.from(JSON.stringify({
-    iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/cloud-platform',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600,
-  })).toString('base64url');
-
-  const crypto = await import('crypto');
-  const sign = crypto.createSign('RSA-SHA256');
-  sign.update(`${header}.${claim}`);
-  const signature = sign.sign(sa.private_key, 'base64url');
-  const jwt = `${header}.${claim}.${signature}`;
-
-  const tokenFetch = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
-  });
-
-  if (!tokenFetch.ok) {
-    const errBody = await tokenFetch.text();
-    throw new Error(`Token exchange failed (${tokenFetch.status}): ${errBody}`);
-  }
-  const tokenData = await tokenFetch.json();
-  tokenExpiresAt = Date.now() + 50 * 60 * 1000;
-  return tokenData.access_token;
-}
-
-async function getVertexClient(): Promise<GoogleGenAI> {
-  const project = process.env.GOOGLE_CLOUD_PROJECT || 'ai-agent-cha-2y53';
-  const location = process.env.GOOGLE_CLOUD_LOCATION || 'global';
-  const token = await getAccessToken();
-
-  return new GoogleGenAI({
-    vertexai: true,
-    project,
-    location,
-    googleAuthOptions: { credentials: { access_token: token } as unknown as undefined },
-    httpOptions: { headers: { Authorization: `Bearer ${token}` } },
-  });
-}
-
-// --- Unified client getter ---
-async function getClient(): Promise<GoogleGenAI> {
-  const mode = getAuthMode();
-  
-  if (mode === 'apikey') {
-    if (!cachedClient || authMode !== 'apikey') {
-      cachedClient = getApiKeyClient();
-      authMode = 'apikey';
-    }
-    return cachedClient;
-  }
-
-  // Vertex: re-create if token expired
-  if (cachedClient && authMode === 'vertex' && Date.now() < tokenExpiresAt) {
-    return cachedClient;
-  }
-  cachedClient = await getVertexClient();
-  authMode = 'vertex';
-  return cachedClient;
-}
-
-// --- Model ---
+const PROJECT  = process.env.GOOGLE_CLOUD_PROJECT  || 'ai-agent-cha-2y53';
+const LOCATION = process.env.GOOGLE_CLOUD_LOCATION || 'europe-west1';
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-// --- Retry helper for transient errors ---
+// ── Service account parsing ─────────────────────────────────────────────────
+
+function parseServiceAccount(): { client_email: string; private_key: string } {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!raw) {
+    throw new Error(
+      'GOOGLE_SERVICE_ACCOUNT_KEY is not set. ' +
+      'Add the service account JSON to .env.local or Vercel env vars.'
+    );
+  }
+
+  // 1. Strip outer quotes that Vercel CLI sometimes adds
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) cleaned = cleaned.slice(1, -1);
+
+  // 2. dotenv converts \n inside double-quoted values to REAL newlines,
+  //    which breaks JSON.parse (JSON forbids literal newlines in strings).
+  //    Re-escape them before parsing.
+  const sanitized = cleaned.replace(/\n/g, String.raw`\n`);
+
+  let sa: Record<string, string>;
+  try {
+    sa = JSON.parse(sanitized);
+  } catch {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON.');
+  }
+
+  if (!sa.client_email || !sa.private_key) {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is missing client_email or private_key.');
+  }
+
+  // 3. After JSON.parse, private_key has real newlines (JSON unescapes \n).
+  //    If still double-escaped (\\n as two chars), normalise for PEM format.
+  const privateKey = sa.private_key.includes('\\n')
+    ? sa.private_key.replace(/\\n/g, '\n')
+    : sa.private_key;
+
+  return { client_email: sa.client_email, private_key: privateKey };
+}
+
+// ── Vertex AI client ────────────────────────────────────────────────────────
+
+let _client: GoogleGenAI | null = null;
+
+function getClient(): GoogleGenAI {
+  if (_client) return _client;
+
+  const { client_email, private_key } = parseServiceAccount();
+
+  const googleAuthOptions: GoogleAuthOptions = {
+    credentials: { client_email, private_key },
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  };
+
+  _client = new GoogleGenAI({
+    vertexai: true,
+    project: PROJECT,
+    location: LOCATION,
+    googleAuthOptions,
+  });
+
+  return _client;
+}
+
+// ── Retry helper ────────────────────────────────────────────────────────────
+
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -146,39 +84,36 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isRetryable = /429|500|502|503|ECONNRESET|ETIMEDOUT|fetch failed/i.test(msg);
-      
+
       if (!isRetryable || attempt === maxRetries - 1) throw err;
-      
+
       const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
-      console.warn(`Gemini retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${msg.substring(0, 80)}`);
+      console.warn(`Gemini retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${msg.substring(0, 100)}`);
       await new Promise(r => setTimeout(r, delay));
-      
-      // Invalidate cached client on auth errors
-      if (/401|403|token/i.test(msg)) {
-        cachedClient = null;
-        tokenExpiresAt = 0;
-      }
+
+      // Reset client on auth errors so credentials are re-fetched
+      if (/401|403|token|credential|auth/i.test(msg)) _client = null;
     }
   }
   throw new Error('Unreachable');
 }
 
-// ============================================================
-// Standard text generation
-// ============================================================
+// ── Public API ──────────────────────────────────────────────────────────────
+
+/**
+ * Standard text generation (no grounding)
+ */
 export async function generateContent(
   prompt: string,
   systemPrompt?: string,
   model?: string
 ): Promise<string> {
   return withRetry(async () => {
-    const client = await getClient();
+    const client  = getClient();
     const modelId = model || DEFAULT_MODEL;
 
     const config: Record<string, unknown> = {};
-    if (systemPrompt) {
-      config.systemInstruction = systemPrompt;
-    }
+    if (systemPrompt) config.systemInstruction = systemPrompt;
 
     const response = await client.models.generateContent({
       model: modelId,
@@ -190,24 +125,22 @@ export async function generateContent(
   });
 }
 
-// ============================================================
-// Search-grounded generation (Google Search)
-// ============================================================
+/**
+ * Search-grounded generation (Google Search tool)
+ */
 export async function generateWithSearch(
   prompt: string,
   systemPrompt?: string,
   model?: string
 ): Promise<{ text: string; sources: string[] }> {
   return withRetry(async () => {
-    const client = await getClient();
+    const client  = getClient();
     const modelId = model || DEFAULT_MODEL;
 
     const config: Record<string, unknown> = {
       tools: [{ googleSearch: {} }],
     };
-    if (systemPrompt) {
-      config.systemInstruction = systemPrompt;
-    }
+    if (systemPrompt) config.systemInstruction = systemPrompt;
 
     const response = await client.models.generateContent({
       model: modelId,
@@ -216,25 +149,25 @@ export async function generateWithSearch(
     });
 
     const text = response.text || '';
-    
-    // Extract sources from grounding metadata
+
+    // Extract grounding sources
     const sources: string[] = [];
     try {
       const candidates = response.candidates;
-      if (candidates && candidates[0]) {
+      if (candidates?.[0]) {
         const grounding = candidates[0].groundingMetadata;
         if (grounding?.groundingChunks) {
           for (const chunk of grounding.groundingChunks) {
-            if (chunk.web?.uri) {
-              sources.push(chunk.web.uri);
-            }
+            if (chunk.web?.uri) sources.push(chunk.web.uri);
           }
         }
       }
     } catch {
-      // Sources extraction is best-effort
+      // sources extraction is best-effort
     }
 
     return { text, sources: [...new Set(sources)] };
   });
 }
+
+
